@@ -1,0 +1,178 @@
+from nltk import pos_tag, word_tokenize
+import re
+
+class farticle(object):
+    def __init__(self, ID, publisher=None, date=None, words=None, headline=None, byline=None, body=None, dictionary=None,
+                  proper=None, liberal=None, conservative=None, political=None):
+        self.ID = ID
+        self.publisher=publisher
+        self.date=date
+        self.words=words
+        self.headline=headline
+        self.byline=byline
+        self.body=body
+        self.dictionary=dictionary
+        self.proper=proper
+        self.liberal=liberal
+        self.conservative=conservative
+        self.political=political
+    
+    def fixTitle(self):
+        if ";" in self.headline:
+            split = self.headline.split(";")
+            print("Split: " + str(split))
+            self.headline = split[0].strip("\n")
+            self.subtitle = split[1].strip("\n")
+        else:
+            self.subtitle = ""
+
+
+
+
+def print_dictionary_csv(csv_name,article):
+    with open(csv_name,'a+') as csv:
+        for word in article.dictionary:
+            csv.write(str(article.ID) + "," + word + "," + str(article.dictionary[word]) + "\n")
+#             print(word,":",article.dictionary[word])
+    
+
+def file_reader(file_name):
+    file = open(file_name, 'r')
+    #print(file.readline())
+    start = 1
+    end = 1
+    count = 1
+    ID = 1
+    lines = file.readlines()
+    for line in lines:
+        if "All Rights Reserved" in line:
+            start = end
+            end = count
+            
+            new_article = open("temp_article.txt","w+")
+            print("article added")
+            article = farticle(ID)
+            ID = ID + 1
+            article.publisher = ""
+            article.date = ""
+            article.words = ""
+            article.headline = ""
+            article.byline = ""
+            article.body = ""
+            article.dictionary = {}
+            article.proper = {}
+            article.conservative = {}
+            article.liberal = {}
+            article.political = {}
+            
+            if start==1:
+                new_article.writelines(lines[start-1:end])
+            else:
+                new_article.writelines(lines[start:end])
+                
+            new_article.seek(0)
+            
+            article_lines = new_article.readlines()
+            article.publisher = article_lines[0:1][0].strip()
+            article.date = article_lines[1:2][0].strip()
+            
+
+            article.liberal = {"human rights":0, "rehabilitation":0, "reintergration":0, "democratic":0}
+            
+            article.conservative = {"lag":0,"lags":0,"con":0,"cons":0,"murderer":0,"murderers":0,
+                                    "rapist":0,"rapists":0,"paedophile":0,"paedophiles":0,"paedo":0,"paedos":0,"pedo":0,"pedos":0,"pedophile":0,"pedophiles":0}
+            
+            article.political = {"brexit":0,"obama":0,"strasbourg":0, "david cameron":0, "labour":0, 
+                                 "conservatives":0,"conservative":0, "parliament":0, "sovereignty":0, "sovereign":0, "control":0}
+            
+            for line_no,article_line in enumerate(article_lines):
+                if "LENGTH:" in article_line:
+                    article.words = article_line.replace("LENGTH: ","")
+                    article.words = article.words.replace("words","")
+                    article.words = article.words.strip()
+                elif "HEADLINE:" in article_line:
+                    article.headline = article_line.strip("HEADLINE:")
+                    byline_found = False
+                    for chk in range(10):
+                        if "BYLINE:" in article_lines[line_no+chk]:
+                            article.headline = article.headline + ' '.join(article_lines[line_no+1:line_no+chk])
+                            byline_found = True
+                        elif "BODY:" in article_lines[line_no+chk] and not byline_found:
+                            article.headline = article.headline + ' '.join(article_lines[line_no+1:line_no+chk])
+                elif "BYLINE:" in article_line:
+                    article.byline = article_line.strip("BYLINE:")
+                    article.byline = article.byline.strip()
+                    if "BODY:" not in article_lines[line_no+1]:
+                        article.byline = article.byline + article_lines[line_no+1]
+                        if "BODY:" not in article_lines[line_no+2]:
+                            article.byline = article.byline + article_lines[line_no+2]
+                elif "All Rights Reserved" in article_line:
+                    continue
+                else:
+                    article.body = article.body + article_line               
+            
+            word_parts = pos_tag(word_tokenize(article.body))
+            length = len(word_parts)
+            old_phrase = ""
+            for i,word in enumerate(word_parts): #loop for proper noun phrases
+                if i < length - 2:
+                    if (word[1] == 'NNP' or word[1] == 'NNPS'):
+                        j = i + 1
+                        phrase = word[0]
+                        while (j < length and ((word_parts[j][1] == 'NNP' or word_parts[j][1] == 'NNPS') or (word_parts[j][1]=='IN' and word_parts[j][0] != 'after' and (word_parts[j+1][1] == 'NNP' or word_parts[j+1][1] == 'NNPS')))):
+                            phrase = phrase +" " + word_parts[j][0]
+                            j = j + 1
+                        if phrase != word[0]:
+                            if phrase in old_phrase:
+                                if phrase == old_phrase:
+                                    old_phrase = phrase
+                                    if phrase not in article.proper:
+                                        article.proper[phrase] = 1
+                                    else:
+                                        article.proper[phrase] = article.proper[phrase] + 1
+                            else:
+                                old_phrase = phrase
+                                if phrase not in article.proper:
+                                    article.proper[phrase] = 1
+                                else:
+                                    article.proper[phrase] = article.proper[phrase] + 1
+                if word[0].upper() not in article.dictionary:
+                    article.dictionary[word[0].upper()] = 1
+                else:
+                    article.dictionary[word[0].upper()] = article.dictionary[word[0].upper()] + 1
+                if i < length - 2:
+                    if word[0].lower() in article.liberal:
+                        article.liberal[word[0].lower()] = article.liberal[word[0].lower()] + 1
+                    elif word[0].lower() + " " + word_parts[i+1][0].lower() in article.liberal:
+                        article.liberal[word[0].lower() + " " + word_parts[i+1][0].lower()] = article.liberal[word[0].lower() + " " + word_parts[i+1][0].lower()] + 1
+                    elif word[0].lower() in article.conservative:
+                        article.conservative[word[0].lower()] = article.conservative[word[0].lower()] + 1
+                    elif word[0].lower() + " " + word_parts[i+1][0].lower() in article.conservative:
+                        article.conservative[word[0].lower() + " " + word_parts[i+1][0].lower()] = article.conservative[word[0].lower() + " " + word_parts[i+1][0].lower()] + 1
+                    elif word[0].lower() in article.political:
+                        article.political[word[0].lower()] = article.political[word[0].lower()] + 1
+                    elif word[0].lower() + " " + word_parts[i+1][0].lower() in article.political:
+                        article.political[word[0].lower() + " " + word_parts[i+1][0].lower()] = article.political[word[0].lower() + " " + word_parts[i+1][0].lower()] + 1    
+            
+            article.fixTitle()           
+#             print("Publisher: " + article.publisher)
+#             print("Date: " + article.date)
+#             print("Length: " + article.words)
+#             print("Headline: " + article.headline)
+#             print("Subtitle: " + article.subtitle)
+#             print("Byline: " + article.byline)        
+    #         print(body)
+#             print(article.proper)
+#             print(article.dictionary)
+#             print(article.liberal)
+#             print(article.conservative)
+#             print(article.political)  
+            print_dictionary_csv("test_csv.csv",article) 
+            new_article.close()
+        count = count + 1
+        
+    
+    file.close()
+
+text = "UK_Broadsheets40_test.TXT" #be sure "All Rights Reserved is at bottom and not at top    
+file_reader(text)
